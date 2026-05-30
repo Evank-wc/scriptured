@@ -24,6 +24,40 @@ final class HomeViewModel {
     )
     private(set) var errorMessage: String?
 
+    var statusMessage: String {
+        if streakStatus.hasCompletedToday {
+            "Your streak is safe for today."
+        } else if streakStatus.isAtRisk {
+            "Your streak is at risk."
+        } else {
+            "Read now to protect your streak."
+        }
+    }
+
+    var urgencyMessage: String {
+        if streakStatus.hasCompletedToday {
+            "Keep the chain alive tomorrow."
+        } else if streakStatus.isAtRisk {
+            "Do not let your progress reset."
+        } else {
+            "Start today and make the first link count."
+        }
+    }
+
+    var todayGoalTitle: String {
+        streakStatus.hasCompletedToday ? "Daily goal complete" : "Today’s reading goal"
+    }
+
+    var todayGoalMessage: String {
+        streakStatus.hasCompletedToday
+            ? "You completed at least one reading today."
+            : "Complete one chapter to secure today’s streak."
+    }
+
+    var todayGoalProgress: Double {
+        streakStatus.hasCompletedToday ? 1 : 0
+    }
+
     func configure(
         progressionService: any ProgressionServicing,
         streakService: any StreakServicing

@@ -3,6 +3,7 @@ import SwiftUI
 struct MainTabView: View {
     private let environment = AppEnvironment.live
 
+    @State private var selectedTab: AppTab = .home
     @State private var homeViewModel = HomeViewModel()
     @State private var bibleReaderViewModel: BibleReaderViewModel
     @State private var plansViewModel = PlansViewModel()
@@ -16,33 +17,50 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        TabView {
-            HomeView(viewModel: homeViewModel)
-                .tabItem {
-                    Label("Home", systemImage: "house")
-                }
+        TabView(selection: $selectedTab) {
+            HomeView(
+                viewModel: homeViewModel,
+                onContinueReading: { selectedTab = .bible },
+                onOpenReadingPlan: { selectedTab = .plans }
+            )
+            .tabItem {
+                Label("Home", systemImage: "house")
+            }
+            .tag(AppTab.home)
 
             BibleReaderView(viewModel: bibleReaderViewModel)
                 .tabItem {
                     Label("Bible", systemImage: "book")
                 }
+                .tag(AppTab.bible)
 
             PlansView(viewModel: plansViewModel)
                 .tabItem {
                     Label("Plans", systemImage: "calendar")
                 }
+                .tag(AppTab.plans)
 
             ShopView(viewModel: shopViewModel)
                 .tabItem {
                     Label("Shop", systemImage: "bag")
                 }
+                .tag(AppTab.shop)
 
             ProfileView(viewModel: profileViewModel)
                 .tabItem {
                     Label("Profile", systemImage: "person")
                 }
+                .tag(AppTab.profile)
         }
     }
+}
+
+private enum AppTab: Hashable {
+    case home
+    case bible
+    case plans
+    case shop
+    case profile
 }
 
 #Preview {
