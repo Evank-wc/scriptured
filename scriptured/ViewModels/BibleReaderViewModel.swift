@@ -31,6 +31,28 @@ final class BibleReaderViewModel {
         return "\(selectedBook.name) \(selectedChapterNumber)"
     }
 
+    var canMoveToPreviousChapter: Bool {
+        guard let selectedBookAbbrev,
+              let bookIndex = books.firstIndex(where: { $0.abbrev == selectedBookAbbrev }) else {
+            return false
+        }
+
+        return selectedChapterNumber > 1 || bookIndex > books.startIndex
+    }
+
+    var canMoveToNextChapter: Bool {
+        guard let selectedBookAbbrev,
+              let bookIndex = books.firstIndex(where: { $0.abbrev == selectedBookAbbrev }) else {
+            return false
+        }
+
+        if selectedChapterNumber < chapters.count {
+            return true
+        }
+
+        return bookIndex < books.index(before: books.endIndex)
+    }
+
     var isCurrentChapterRead: Bool {
         guard let selectedBookAbbrev else {
             return false
@@ -62,12 +84,24 @@ final class BibleReaderViewModel {
     }
 
     func selectLanguage(_ language: BibleLanguage) {
+        let previousBookAbbrev = selectedBookAbbrev
+        let previousChapterNumber = selectedChapterNumber
+
         do {
             bibleService.selectLanguage(language)
             selectedLanguage = language
             books = try bibleService.allBooks()
-            selectedBookAbbrev = books.first?.abbrev
-            try reloadChaptersAndVerses(resetChapter: true)
+
+            if let previousBookAbbrev,
+               books.contains(where: { $0.abbrev == previousBookAbbrev }) {
+                selectedBookAbbrev = previousBookAbbrev
+                selectedChapterNumber = previousChapterNumber
+                try reloadChaptersAndVerses(resetChapter: false)
+            } else {
+                selectedBookAbbrev = books.first?.abbrev
+                try reloadChaptersAndVerses(resetChapter: true)
+            }
+
             errorMessage = nil
         } catch {
             clearReaderContent()
@@ -106,12 +140,75 @@ final class BibleReaderViewModel {
         }
     }
 
-    func markCurrentChapterAsRead() {
+    func moveToPreviousChapter() {
+        guard canMoveToPreviousChapter else {
+            return
+        }
+
+        if selectedChapterNumber > 1 {
+            selectChapter(number: selectedChapterNumber - 1)
+            return
+        }
+
+        guard let currentBookAbbrev = selectedBookAbbrev,
+              let currentIndex = books.firstIndex(where: { $0.abbrev == currentBookAbbrev }),
+              currentIndex > books.startIndex else {
+            return
+        }
+
+        let previousBook = books[books.index(before: currentIndex)]
+        selectedBookAbbrev = previousBook.abbrev
+
+        do {
+            chapters = try bibleService.chapters(for: previousBook.abbrev)
+            selectedChapterNumber = chapters.last?.number ?? 1
+            try reloadVerses()
+            errorMessage = nil
+        } catch {
+            verses = []
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func moveToNextChapter() {
+        guard canMoveToNextChapter else {
+            return
+        }
+
+        if selectedChapterNumber < chapters.count {
+            selectChapter(number: selectedChapterNumber + 1)
+            return
+        }
+
+        guard let currentBookAbbrev = selectedBookAbbrev,
+              let currentIndex = books.firstIndex(where: { $0.abbrev == currentBookAbbrev }),
+              currentIndex < books.index(before: books.endIndex) else {
+            return
+        }
+
+        let nextBook = books[books.index(after: currentIndex)]
+        selectedBookAbbrev = nextBook.abbrev
+
+        do {
+            try reloadChaptersAndVerses(resetChapter: true)
+            errorMessage = nil
+        } catch {
+            verses = []
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func toggleCurrentChapterRead() {
         guard let selectedBookAbbrev else {
             return
         }
 
-        readChapterIDs.insert(chapterID(bookAbbrev: selectedBookAbbrev, chapterNumber: selectedChapterNumber))
+        let id = chapterID(bookAbbrev: selectedBookAbbrev, chapterNumber: selectedChapterNumber)
+        if readChapterIDs.contains(id) {
+            readChapterIDs.remove(id)
+        } else {
+            readChapterIDs.insert(id)
+        }
     }
 
     private func reloadChaptersAndVerses(resetChapter: Bool) throws {
@@ -151,6 +248,6 @@ final class BibleReaderViewModel {
     }
 
     private func chapterID(bookAbbrev: String, chapterNumber: Int) -> String {
-        "\(selectedLanguage.id)-\(bookAbbrev)-\(chapterNumber)"
+        "\(bookAbbrev)-\(chapterNumber)"
     }
 }

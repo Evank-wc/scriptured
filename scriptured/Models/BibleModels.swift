@@ -96,6 +96,7 @@ enum BibleBookNameProvider {
         "nm": "Numbers",
         "dt": "Deuteronomy",
         "js": "Joshua",
+        "jud": "Judges",
         "judg": "Judges",
         "rt": "Ruth",
         "1sm": "1 Samuel",
@@ -155,7 +156,7 @@ enum BibleBookNameProvider {
         "2jo": "2 John",
         "3jo": "3 John",
         "jd": "Jude",
-        "rv": "Revelation"
+        "re": "Revelation"
     ]
 
     private static let chineseNames: [String: String] = [
@@ -165,6 +166,7 @@ enum BibleBookNameProvider {
         "nm": "民數記",
         "dt": "申命記",
         "js": "約書亞記",
+        "jud": "士師記",
         "judg": "士師記",
         "rt": "路得記",
         "1sm": "撒母耳記上",
@@ -224,7 +226,7 @@ enum BibleBookNameProvider {
         "2jo": "約翰二書",
         "3jo": "約翰三書",
         "jd": "猶大書",
-        "rv": "啟示錄"
+        "re": "啟示錄"
     ]
 
     static func name(for abbrev: String, language: BibleLanguage) -> String? {

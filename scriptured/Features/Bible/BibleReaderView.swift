@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BibleReaderView: View {
     @State private var viewModel: BibleReaderViewModel
+    @State private var isShowingSettings = false
 
     init(viewModel: BibleReaderViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -10,89 +11,104 @@ struct BibleReaderView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                readerControls
-
                 if let errorMessage = viewModel.errorMessage {
                     ContentUnavailableView(
                         "Bible Unavailable",
                         systemImage: "exclamationmark.triangle",
                         description: Text(errorMessage)
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.verses.isEmpty {
                     ContentUnavailableView(
                         "No Verses Loaded",
                         systemImage: "book.closed",
                         description: Text("Choose a book and chapter to begin reading")
                     )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     verseList
                 }
+
+                bottomControls
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle(viewModel.currentReference)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    navigationPickerHeader
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isShowingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Bible reader settings")
+                }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                BibleReaderSettingsView(viewModel: viewModel)
+                    .presentationDetents([.medium])
+            }
         }
         .task {
             viewModel.load()
         }
     }
 
-    private var readerControls: some View {
-        VStack(spacing: 14) {
-            Picker("Language", selection: languageSelection) {
-                ForEach(viewModel.availableLanguages) { language in
-                    Text(language.version.displayName)
-                        .tag(language)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            HStack(spacing: 12) {
-                Picker("Book", selection: bookSelection) {
-                    ForEach(viewModel.books) { book in
-                        Text(book.name)
-                            .tag(book.abbrev)
+    private var navigationPickerHeader: some View {
+        HStack(spacing: 8) {
+            Menu {
+                ForEach(viewModel.books) { book in
+                    Button(book.name) {
+                        viewModel.selectBook(abbrev: book.abbrev)
                     }
                 }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(viewModel.books.isEmpty)
-
-                Picker("Chapter", selection: chapterSelection) {
-                    ForEach(viewModel.chapters) { chapter in
-                        Text("Chapter \(chapter.number)")
-                            .tag(chapter.number)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .disabled(viewModel.chapters.isEmpty)
-            }
-
-            HStack(spacing: 12) {
-                Image(systemName: "textformat.size.smaller")
-                    .foregroundStyle(.secondary)
-
-                Slider(value: $viewModel.fontSize, in: 14...28, step: 1)
-
-                Image(systemName: "textformat.size.larger")
-                    .foregroundStyle(.secondary)
-            }
-
-            Button {
-                viewModel.markCurrentChapterAsRead()
             } label: {
-                Label(
-                    viewModel.isCurrentChapterRead ? "Chapter Read" : "Mark Chapter Read",
-                    systemImage: viewModel.isCurrentChapterRead ? "checkmark.circle.fill" : "checkmark.circle"
-                )
-                .frame(maxWidth: .infinity)
+                HStack(spacing: 4) {
+                    Text(viewModel.selectedBook?.name ?? "Book")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 158, alignment: .leading)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.selectedBookAbbrev == nil || viewModel.verses.isEmpty || viewModel.isCurrentChapterRead)
+            .disabled(viewModel.books.isEmpty)
+
+            Menu {
+                ForEach(viewModel.chapters) { chapter in
+                    Button("\(chapter.number)") {
+                        viewModel.selectChapter(number: chapter.number)
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Text("\(viewModel.selectedChapterNumber)")
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .frame(width: 24, alignment: .trailing)
+
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 2)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .disabled(viewModel.chapters.isEmpty)
         }
-        .padding(16)
-        .background(Color(.systemBackground))
+        .font(.headline.weight(.semibold))
+        .foregroundStyle(Color(.label))
+        .frame(width: 224, alignment: .leading)
     }
 
     private var verseList: some View {
@@ -116,13 +132,50 @@ struct BibleReaderView: View {
         }
     }
 
-    private var languageSelection: Binding<BibleLanguage> {
-        Binding(
-            get: { viewModel.selectedLanguage },
-            set: { language in
-                viewModel.selectLanguage(language)
+    private var bottomControls: some View {
+        HStack(spacing: 16) {
+            Button {
+                viewModel.moveToPreviousChapter()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 36, height: 32)
             }
-        )
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!viewModel.canMoveToPreviousChapter)
+            .accessibilityLabel("Previous chapter")
+
+            Spacer()
+
+            Button {
+                viewModel.toggleCurrentChapterRead()
+            } label: {
+                Label(
+                    viewModel.isCurrentChapterRead ? "Mark Unread" : "Mark Read",
+                    systemImage: viewModel.isCurrentChapterRead ? "arrow.uturn.backward.circle" : "checkmark.circle"
+                )
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(viewModel.selectedBookAbbrev == nil || viewModel.verses.isEmpty)
+
+            Spacer()
+
+            Button {
+                viewModel.moveToNextChapter()
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 36, height: 32)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(!viewModel.canMoveToNextChapter)
+            .accessibilityLabel("Next chapter")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     private var bookSelection: Binding<String> {
@@ -151,6 +204,61 @@ struct BibleReaderView: View {
         withAnimation(.snappy) {
             proxy.scrollTo(firstVerse.id, anchor: .top)
         }
+    }
+}
+
+private struct BibleReaderSettingsView: View {
+    @Bindable var viewModel: BibleReaderViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Language") {
+                    Picker("Language", selection: languageSelection) {
+                        ForEach(viewModel.availableLanguages) { language in
+                            Text(language.version.displayName)
+                                .tag(language)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                Section("Text Size") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "textformat.size.smaller")
+                            .foregroundStyle(.secondary)
+
+                        Slider(value: $viewModel.fontSize, in: 14...28, step: 1)
+
+                        Image(systemName: "textformat.size.larger")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("Preview text")
+                        .font(.system(size: viewModel.fontSize, weight: .regular, design: .serif))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("Reader Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var languageSelection: Binding<BibleLanguage> {
+        Binding(
+            get: { viewModel.selectedLanguage },
+            set: { language in
+                viewModel.selectLanguage(language)
+            }
+        )
     }
 }
 
