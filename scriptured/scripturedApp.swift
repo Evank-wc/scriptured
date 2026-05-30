@@ -17,7 +17,8 @@ struct scripturedApp: App {
         .modelContainer(for: [
             ReadingSession.self,
             UserStats.self,
-            RewardTransaction.self
+            RewardTransaction.self,
+            StreakState.self
         ])
     }
 }

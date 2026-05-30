@@ -20,6 +20,7 @@ struct HomeView: View {
                             description: Text(errorMessage)
                         )
                     } else {
+                        StreakStatusCard(status: viewModel.streakStatus)
                         levelCard
                         currencyRow
                     }
@@ -30,7 +31,10 @@ struct HomeView: View {
             .navigationTitle(viewModel.title)
         }
         .onAppear {
-            viewModel.configure(progressionService: ProgressionService(modelContext: modelContext))
+            viewModel.configure(
+                progressionService: ProgressionService(modelContext: modelContext),
+                streakService: StreakService(modelContext: modelContext)
+            )
             viewModel.loadStats()
         }
     }
