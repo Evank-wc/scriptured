@@ -1,6 +1,8 @@
+import SwiftData
 import SwiftUI
 
 struct BibleReaderView: View {
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel: BibleReaderViewModel
     @State private var isShowingSettings = false
 
@@ -54,7 +56,28 @@ struct BibleReaderView: View {
             }
         }
         .task {
+            viewModel.configure(
+                progressService: ReadingProgressService(modelContext: modelContext),
+                progressionService: ProgressionService(modelContext: modelContext)
+            )
             viewModel.load()
+        }
+        .alert(
+            "Reading Progress",
+            isPresented: Binding(
+                get: { viewModel.rewardMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.rewardMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("OK", role: .cancel) {
+                viewModel.rewardMessage = nil
+            }
+        } message: {
+            Text(viewModel.rewardMessage ?? "")
         }
     }
 

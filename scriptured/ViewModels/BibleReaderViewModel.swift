@@ -7,7 +7,10 @@ final class BibleReaderViewModel {
     let availableLanguages = BibleLanguage.allCases
 
     private let bibleService: any BibleServicing
-    private var readChapterIDs: Set<String> = []
+    private let readerStateStore: UserDefaults
+    private var progressService: (any ReadingProgressServicing)?
+    private var progressionService: (any ProgressionServicing)?
+    private var completedTodayChapterIDs: Set<String> = []
 
     private(set) var selectedLanguage: BibleLanguage
     private(set) var books: [BibleBook] = []
@@ -16,6 +19,7 @@ final class BibleReaderViewModel {
     private(set) var selectedBookAbbrev: String?
     private(set) var selectedChapterNumber = 1
     private(set) var errorMessage: String?
+    var rewardMessage: String?
 
     var fontSize = 18.0
 
@@ -58,24 +62,55 @@ final class BibleReaderViewModel {
             return false
         }
 
-        return readChapterIDs.contains(chapterID(bookAbbrev: selectedBookAbbrev, chapterNumber: selectedChapterNumber))
+        return completedTodayChapterIDs.contains(
+            chapterID(bookAbbrev: selectedBookAbbrev, chapterNumber: selectedChapterNumber)
+        )
     }
 
     convenience init() {
         self.init(bibleService: BibleService())
     }
 
-    init(bibleService: any BibleServicing) {
+    init(bibleService: any BibleServicing, readerStateStore: UserDefaults = .standard) {
         self.bibleService = bibleService
-        self.selectedLanguage = bibleService.selectedLanguage
+        self.readerStateStore = readerStateStore
+
+        let savedLanguage = readerStateStore.string(forKey: ReaderStateKey.language.rawValue)
+            .flatMap(BibleLanguage.init(rawValue:))
+            ?? bibleService.selectedLanguage
+        bibleService.selectLanguage(savedLanguage)
+
+        self.selectedLanguage = savedLanguage
+        self.selectedBookAbbrev = readerStateStore.string(forKey: ReaderStateKey.bookAbbrev.rawValue)
+
+        let savedChapterNumber = readerStateStore.integer(forKey: ReaderStateKey.chapterNumber.rawValue)
+        self.selectedChapterNumber = max(savedChapterNumber, 1)
+    }
+
+    func configure(
+        progressService: any ReadingProgressServicing,
+        progressionService: any ProgressionServicing
+    ) {
+        self.progressService = progressService
+        self.progressionService = progressionService
+        refreshCompletedReadingsForToday()
     }
 
     func load() {
         do {
             selectedLanguage = bibleService.selectedLanguage
             books = try bibleService.allBooks()
-            selectedBookAbbrev = selectedBookAbbrev ?? books.first?.abbrev
-            try reloadChaptersAndVerses(resetChapter: true)
+
+            if let selectedBookAbbrev,
+               books.contains(where: { $0.abbrev == selectedBookAbbrev }) {
+                try reloadChaptersAndVerses(resetChapter: false)
+            } else {
+                selectedBookAbbrev = books.first?.abbrev
+                try reloadChaptersAndVerses(resetChapter: true)
+            }
+
+            persistReaderState()
+            refreshCompletedReadingsForToday()
             errorMessage = nil
         } catch {
             clearReaderContent()
@@ -102,6 +137,8 @@ final class BibleReaderViewModel {
                 try reloadChaptersAndVerses(resetChapter: true)
             }
 
+            persistReaderState()
+            refreshCompletedReadingsForToday()
             errorMessage = nil
         } catch {
             clearReaderContent()
@@ -117,6 +154,7 @@ final class BibleReaderViewModel {
         selectedBookAbbrev = abbrev
         do {
             try reloadChaptersAndVerses(resetChapter: true)
+            persistReaderState()
             errorMessage = nil
         } catch {
             chapters = []
@@ -133,6 +171,7 @@ final class BibleReaderViewModel {
         selectedChapterNumber = number
         do {
             try reloadVerses()
+            persistReaderState()
             errorMessage = nil
         } catch {
             verses = []
@@ -163,6 +202,7 @@ final class BibleReaderViewModel {
             chapters = try bibleService.chapters(for: previousBook.abbrev)
             selectedChapterNumber = chapters.last?.number ?? 1
             try reloadVerses()
+            persistReaderState()
             errorMessage = nil
         } catch {
             verses = []
@@ -191,6 +231,7 @@ final class BibleReaderViewModel {
 
         do {
             try reloadChaptersAndVerses(resetChapter: true)
+            persistReaderState()
             errorMessage = nil
         } catch {
             verses = []
@@ -204,10 +245,39 @@ final class BibleReaderViewModel {
         }
 
         let id = chapterID(bookAbbrev: selectedBookAbbrev, chapterNumber: selectedChapterNumber)
-        if readChapterIDs.contains(id) {
-            readChapterIDs.remove(id)
-        } else {
-            readChapterIDs.insert(id)
+
+        do {
+            if isCurrentChapterRead {
+                try progressService?.removeCompletedReadingSessionForToday(
+                    bookAbbrev: selectedBookAbbrev,
+                    chapterIndex: selectedChapterNumber
+                )
+                completedTodayChapterIDs.remove(id)
+                rewardMessage = nil
+            } else if let selectedBook {
+                let claimResult = try progressionService?.claimChapterCompletionReward(
+                    language: selectedLanguage,
+                    bookAbbrev: selectedBook.abbrev,
+                    chapterIndex: selectedChapterNumber,
+                    xpAwarded: 10,
+                    coinsAwarded: 1
+                )
+
+                try progressService?.saveCompletedReadingSession(
+                    bibleLanguage: selectedLanguage,
+                    bookAbbrev: selectedBook.abbrev,
+                    bookName: selectedBook.name,
+                    chapterIndex: selectedChapterNumber,
+                    xpEarned: claimResult?.xpAwarded ?? 0,
+                    coinsEarned: claimResult?.coinsAwarded ?? 0
+                )
+                completedTodayChapterIDs.insert(id)
+                rewardMessage = rewardMessage(for: claimResult)
+            }
+
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -239,6 +309,23 @@ final class BibleReaderViewModel {
         )
     }
 
+    private func refreshCompletedReadingsForToday() {
+        guard let progressService else {
+            return
+        }
+
+        do {
+            completedTodayChapterIDs = Set(
+                try progressService.todaysCompletedReadings().map {
+                    chapterID(bookAbbrev: $0.bookAbbrev, chapterNumber: $0.chapterIndex)
+                }
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func clearReaderContent() {
         books = []
         chapters = []
@@ -247,7 +334,31 @@ final class BibleReaderViewModel {
         selectedChapterNumber = 1
     }
 
+    private func rewardMessage(for claimResult: RewardClaimResult?) -> String {
+        guard let claimResult else {
+            return "Chapter marked read. Rewards already claimed."
+        }
+
+        if claimResult.didAwardRewards {
+            return "+\(claimResult.xpAwarded) XP and +\(claimResult.coinsAwarded) coin earned."
+        }
+
+        return "Chapter marked read. Rewards already claimed."
+    }
+
+    private func persistReaderState() {
+        readerStateStore.set(selectedLanguage.rawValue, forKey: ReaderStateKey.language.rawValue)
+        readerStateStore.set(selectedBookAbbrev, forKey: ReaderStateKey.bookAbbrev.rawValue)
+        readerStateStore.set(selectedChapterNumber, forKey: ReaderStateKey.chapterNumber.rawValue)
+    }
+
     private func chapterID(bookAbbrev: String, chapterNumber: Int) -> String {
         "\(bookAbbrev)-\(chapterNumber)"
+    }
+
+    private enum ReaderStateKey: String {
+        case language = "bibleReader.language"
+        case bookAbbrev = "bibleReader.bookAbbrev"
+        case chapterNumber = "bibleReader.chapterNumber"
     }
 }
