@@ -18,7 +18,9 @@ struct scripturedApp: App {
             ReadingSession.self,
             UserStats.self,
             RewardTransaction.self,
-            StreakState.self
+            StreakState.self,
+            UserReadingPlan.self,
+            UserReadingPlanDayProgress.self
         ])
     }
 }
