@@ -8,6 +8,8 @@
 
 /* Begin PBXFileReference section */
 		3B31E01F2FCB35BA00EF7543 /* scriptured.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = scriptured.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3B31E0A42FCB59EA00EF7543 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		3B31E0A52FCB5A0D00EF7543 /* CODEX_HANDOFF.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CODEX_HANDOFF.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -34,6 +36,7 @@
 			children = (
 				3B31E0212FCB35BA00EF7543 /* scriptured */,
 				3B31E0202FCB35BA00EF7543 /* Products */,
+				3B31E0A32FCB59D000EF7543 /* docs */,
 			);
 			sourceTree = "<group>";
 		};
@@ -43,6 +46,15 @@
 				3B31E01F2FCB35BA00EF7543 /* scriptured.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3B31E0A32FCB59D000EF7543 /* docs */ = {
+			isa = PBXGroup;
+			children = (
+				3B31E0A42FCB59EA00EF7543 /* README.md */,
+				3B31E0A52FCB5A0D00EF7543 /* CODEX_HANDOFF.md */,
+			);
+			path = docs;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
