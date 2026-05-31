@@ -1,8 +1,12 @@
+import SwiftData
 import SwiftUI
 
 struct MainTabView: View {
+    @Environment(\.modelContext) private var modelContext
+
     private let environment = AppEnvironment.live
 
+    @AppStorage(ReadingActivitySignal.revisionKey) private var readingActivityRevision = 0
     @State private var selectedTab: AppTab = .home
     @State private var homeViewModel = HomeViewModel()
     @State private var bibleReaderViewModel: BibleReaderViewModel
@@ -21,7 +25,11 @@ struct MainTabView: View {
             HomeView(
                 viewModel: homeViewModel,
                 onContinueReading: { selectedTab = .bible },
-                onOpenReadingPlan: { selectedTab = .plans }
+                onOpenReadingPlan: { selectedTab = .plans },
+                onOpenPlanReading: { reading in
+                    bibleReaderViewModel.openReading(reading)
+                    selectedTab = .bible
+                }
             )
             .tabItem {
                 Label("Home", systemImage: "house")
@@ -53,6 +61,39 @@ struct MainTabView: View {
                 .tag(AppTab.profile)
         }
         .tint(AppTheme.Colors.meadow)
+        .onAppear {
+            configureViewModels()
+        }
+        .onChange(of: selectedTab) { _, tab in
+            if tab == .home {
+                homeViewModel.loadStats()
+            }
+        }
+        .onChange(of: readingActivityRevision) { _, _ in
+            homeViewModel.loadStats()
+            bibleReaderViewModel.refreshProgressFromStorage()
+            plansViewModel.refreshSelectionState()
+        }
+    }
+
+    private func configureViewModels() {
+        let progressionService = ProgressionService(modelContext: modelContext)
+        let readingProgressService = ReadingProgressService(modelContext: modelContext)
+        let readingPlanService = ReadingPlanService(modelContext: modelContext)
+
+        homeViewModel.configure(
+            progressionService: progressionService,
+            streakService: StreakService(modelContext: modelContext),
+            readingProgressService: readingProgressService,
+            bibleService: environment.bibleService,
+            readingPlanService: readingPlanService
+        )
+        bibleReaderViewModel.configure(
+            progressService: readingProgressService,
+            progressionService: progressionService,
+            readingPlanService: readingPlanService
+        )
+        plansViewModel.configure(readingPlanService: readingPlanService)
     }
 }
 

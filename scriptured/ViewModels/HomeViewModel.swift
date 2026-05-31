@@ -10,6 +10,7 @@ final class HomeViewModel {
     private var streakService: (any StreakServicing)?
     private var readingProgressService: (any ReadingProgressServicing)?
     private var bibleService: (any BibleServicing)?
+    private var readingPlanService: ReadingPlanService?
 
     private(set) var totalXP = 0
     private(set) var currentLevel = 1
@@ -18,6 +19,8 @@ final class HomeViewModel {
     private(set) var chaptersRead = 0
     private(set) var totalBibleChapters = 0
     private(set) var dailyGoalsCompleted = 0
+    private(set) var todayPlanAssignment: ReadingPlanTodayAssignment?
+    private(set) var planActionMessage: String?
     private(set) var xpProgress = XPProgress(currentXP: 0, requiredXP: 150)
     private(set) var streakStatus = StreakStatus(
         currentStreak: 0,
@@ -35,6 +38,24 @@ final class HomeViewModel {
         }
 
         return "\(chaptersRead)/\(totalBibleChapters)"
+    }
+
+    var todayPlanProgressText: String {
+        guard let todayPlanAssignment else {
+            return "No active plan"
+        }
+
+        return "\(todayPlanAssignment.completedReadingKeys.count)/\(todayPlanAssignment.readings.count) readings"
+    }
+
+    var nextPlanReading: PlanReadingReference? {
+        guard let todayPlanAssignment else {
+            return nil
+        }
+
+        return todayPlanAssignment.readings.first {
+            !todayPlanAssignment.completedReadingKeys.contains($0.readingKey)
+        } ?? todayPlanAssignment.readings.first
     }
 
     var statusMessage: String {
@@ -58,30 +79,75 @@ final class HomeViewModel {
     }
 
     var todayGoalTitle: String {
-        streakStatus.hasCompletedToday ? "Daily goal complete" : "Today’s reading goal"
+        if todayPlanAssignment?.isComplete == true {
+            return "Plan goal complete"
+        }
+        return streakStatus.hasCompletedToday ? "Daily goal complete" : "Today’s reading goal"
     }
 
     var todayGoalMessage: String {
-        streakStatus.hasCompletedToday
+        if let todayPlanAssignment {
+            if todayPlanAssignment.isComplete {
+                return "You completed Day \(todayPlanAssignment.dayNumber) of \(todayPlanAssignment.plan.name)."
+            }
+            return "Complete today’s plan readings to earn the daily plan bonus."
+        }
+
+        return streakStatus.hasCompletedToday
             ? "Come back tomorrow to keep growing."
             : "Complete one chapter or plan part to secure today’s streak."
     }
 
     var todayGoalProgress: Double {
-        streakStatus.hasCompletedToday ? 1 : 0
+        if let todayPlanAssignment, !todayPlanAssignment.readings.isEmpty {
+            return Double(todayPlanAssignment.completedReadingKeys.count) / Double(todayPlanAssignment.readings.count)
+        }
+        return streakStatus.hasCompletedToday ? 1 : 0
     }
 
     func configure(
         progressionService: any ProgressionServicing,
         streakService: any StreakServicing,
         readingProgressService: (any ReadingProgressServicing)? = nil,
-        bibleService: (any BibleServicing)? = nil
+        bibleService: (any BibleServicing)? = nil,
+        readingPlanService: ReadingPlanService? = nil
     ) {
         self.progressionService = progressionService
         self.streakService = streakService
         self.readingProgressService = readingProgressService
         self.bibleService = bibleService
+        self.readingPlanService = readingPlanService
         loadStats()
+    }
+
+    func completeTodayPlan() {
+        guard let progressionService,
+              let readingProgressService,
+              let readingPlanService else {
+            planActionMessage = "Plan progress tracking is not ready yet. Please try again."
+            return
+        }
+
+        do {
+            guard let result = try readingPlanService.markTodayComplete(
+                progressionService: progressionService,
+                readingProgressService: readingProgressService
+            ) else {
+                planActionMessage = "Select a plan to start tracking today’s reading."
+                loadStats()
+                return
+            }
+
+            if let rewardResult = result.rewardResult, rewardResult.didAwardRewards {
+                planActionMessage = "Day \(result.dayNumber) complete: +\(rewardResult.xpAwarded) XP and +\(rewardResult.coinsAwarded) coins."
+            } else {
+                planActionMessage = "Day \(result.dayNumber) is already complete."
+            }
+            ReadingActivitySignal.send()
+            loadStats()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func loadStats() {
@@ -102,6 +168,7 @@ final class HomeViewModel {
             chaptersRead = uniqueChaptersReadCount(from: sessions) ?? chaptersRead
             dailyGoalsCompleted = dailyGoalsCompletedCount(from: sessions) ?? dailyGoalsCompleted
             totalBibleChapters = try totalChapterCount() ?? totalBibleChapters
+            todayPlanAssignment = try readingPlanService?.todaysAssignment()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

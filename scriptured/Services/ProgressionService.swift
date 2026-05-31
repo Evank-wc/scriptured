@@ -20,6 +20,12 @@ protocol ProgressionServicing {
         xpAwarded: Int,
         coinsAwarded: Int
     ) throws -> RewardClaimResult
+    func claimPlanDayCompletionReward(
+        planId: String,
+        dayNumber: Int,
+        xpAwarded: Int,
+        coinsAwarded: Int
+    ) throws -> RewardClaimResult
 }
 
 struct LevelUpResult {
@@ -61,17 +67,30 @@ struct ProgressionService: ProgressionServicing {
         var descriptor = FetchDescriptor<UserStats>(
             sortBy: [SortDescriptor(\.lastUpdated, order: .reverse)]
         )
-        descriptor.fetchLimit = 1
         descriptor.includePendingChanges = true
 
-        if let stats = try modelContext.fetch(descriptor).first {
+        let statsRows = try modelContext.fetch(descriptor)
+        guard let primaryStats = statsRows.first else {
+            let stats = UserStats()
+            modelContext.insert(stats)
+            try modelContext.save()
             return stats
         }
 
-        let stats = UserStats()
-        modelContext.insert(stats)
-        try modelContext.save()
-        return stats
+        if statsRows.count > 1 {
+            primaryStats.totalXP = statsRows.map(\.totalXP).max() ?? primaryStats.totalXP
+            primaryStats.currentLevel = calculateLevelFromXP(primaryStats.totalXP)
+            primaryStats.coins = statsRows.map(\.coins).max() ?? primaryStats.coins
+            primaryStats.lifetimeCoins = statsRows.map(\.lifetimeCoins).max() ?? primaryStats.lifetimeCoins
+            primaryStats.lastUpdated = .now
+
+            for duplicateStats in statsRows.dropFirst() {
+                modelContext.delete(duplicateStats)
+            }
+            try modelContext.save()
+        }
+
+        return primaryStats
     }
 
     func addXP(amount: Int) throws -> LevelUpResult {
@@ -207,6 +226,60 @@ struct ProgressionService: ProgressionServicing {
         let transaction = RewardTransaction(
             rewardKey: rewardKey,
             rewardType: "chapterCompletion",
+            xpAwarded: max(xpAwarded, 0),
+            coinsAwarded: max(coinsAwarded, 0)
+        )
+        modelContext.insert(transaction)
+        try modelContext.save()
+
+        let levelUpResult = LevelUpResult(
+            previousLevel: previousLevel,
+            currentLevel: stats.currentLevel,
+            didLevelUp: detectLevelUp(previousLevel: previousLevel, newLevel: stats.currentLevel)
+        )
+
+        return RewardClaimResult(
+            rewardKey: rewardKey,
+            didAwardRewards: true,
+            xpAwarded: max(xpAwarded, 0),
+            coinsAwarded: max(coinsAwarded, 0),
+            levelUpResult: levelUpResult
+        )
+    }
+
+    func claimPlanDayCompletionReward(
+        planId: String,
+        dayNumber: Int,
+        xpAwarded: Int,
+        coinsAwarded: Int
+    ) throws -> RewardClaimResult {
+        let rewardKey = "planDay:\(planId):\(dayNumber)"
+
+        if try hasClaimedReward(rewardKey: rewardKey) {
+            return RewardClaimResult(
+                rewardKey: rewardKey,
+                didAwardRewards: false,
+                xpAwarded: 0,
+                coinsAwarded: 0,
+                levelUpResult: nil
+            )
+        }
+
+        let stats = try currentStats()
+        let previousLevel = stats.currentLevel
+        stats.totalXP += max(xpAwarded, 0)
+        stats.currentLevel = calculateLevelFromXP(stats.totalXP)
+        stats.coins += max(coinsAwarded, 0)
+        stats.lifetimeCoins += max(coinsAwarded, 0)
+        stats.lastUpdated = .now
+
+        if detectLevelUp(previousLevel: previousLevel, newLevel: stats.currentLevel) {
+            try grantLevelUpReward(for: stats.currentLevel)
+        }
+
+        let transaction = RewardTransaction(
+            rewardKey: rewardKey,
+            rewardType: "planDayCompletion",
             xpAwarded: max(xpAwarded, 0),
             coinsAwarded: max(coinsAwarded, 0)
         )

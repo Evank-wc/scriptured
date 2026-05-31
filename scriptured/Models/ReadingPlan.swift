@@ -89,13 +89,26 @@ struct ReadingPlanFile: Identifiable, Hashable, Codable {
     }
 }
 
+struct PlanReadingReference: Identifiable, Hashable, Codable {
+    let displayText: String
+    let bookName: String
+    let bookAbbrev: String
+    let chapterNumber: Int
+
+    var id: String { readingKey }
+    var readingKey: String { "\(bookAbbrev)-\(chapterNumber)" }
+}
+
 @Model
 final class UserReadingPlan {
     @Attribute(.unique) var planId: String
+    var selectedPlanId: String
     var planName: String
     var planAbbreviation: String
     var startDate: Date
     var currentDayNumber: Int
+    var completedDayNumbers: [Int]
+    var completedReadingKeys: [String]
     var isActive: Bool
     var isCompleted: Bool
 
@@ -105,14 +118,19 @@ final class UserReadingPlan {
         planAbbreviation: String,
         startDate: Date = .now,
         currentDayNumber: Int = 1,
+        completedDayNumbers: [Int] = [],
+        completedReadingKeys: [String] = [],
         isActive: Bool = true,
         isCompleted: Bool = false
     ) {
         self.planId = planId
+        self.selectedPlanId = planId
         self.planName = planName
         self.planAbbreviation = planAbbreviation
         self.startDate = startDate
         self.currentDayNumber = currentDayNumber
+        self.completedDayNumbers = completedDayNumbers
+        self.completedReadingKeys = completedReadingKeys
         self.isActive = isActive
         self.isCompleted = isCompleted
     }
@@ -123,12 +141,25 @@ final class UserReadingPlanDayProgress {
     @Attribute(.unique) var progressKey: String
     var planId: String
     var dayNumber: Int
-    var completedAt: Date
+    var completedReadingKeys: [String]
+    var isCompleted: Bool
+    var completedAt: Date?
+    var updatedAt: Date
 
-    init(planId: String, dayNumber: Int, completedAt: Date = .now) {
+    init(
+        planId: String,
+        dayNumber: Int,
+        completedReadingKeys: [String] = [],
+        isCompleted: Bool = false,
+        completedAt: Date? = nil,
+        updatedAt: Date = .now
+    ) {
         self.progressKey = "\(planId):\(dayNumber)"
         self.planId = planId
         self.dayNumber = dayNumber
+        self.completedReadingKeys = completedReadingKeys
+        self.isCompleted = isCompleted
         self.completedAt = completedAt
+        self.updatedAt = updatedAt
     }
 }

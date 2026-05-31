@@ -10,6 +10,7 @@ final class BibleReaderViewModel {
     private let readerStateStore: UserDefaults
     private var progressService: (any ReadingProgressServicing)?
     private var progressionService: (any ProgressionServicing)?
+    private var readingPlanService: ReadingPlanService?
     private var completedTodayChapterIDs: Set<String> = []
 
     private(set) var selectedLanguage: BibleLanguage
@@ -89,10 +90,12 @@ final class BibleReaderViewModel {
 
     func configure(
         progressService: any ReadingProgressServicing,
-        progressionService: any ProgressionServicing
+        progressionService: any ProgressionServicing,
+        readingPlanService: ReadingPlanService? = nil
     ) {
         self.progressService = progressService
         self.progressionService = progressionService
+        self.readingPlanService = readingPlanService
         refreshCompletedReadingsForToday()
     }
 
@@ -239,8 +242,33 @@ final class BibleReaderViewModel {
         }
     }
 
+    func openReading(_ reading: PlanReadingReference) {
+        do {
+            if books.isEmpty {
+                books = try bibleService.allBooks()
+            }
+            selectedBookAbbrev = reading.bookAbbrev
+            selectedChapterNumber = reading.chapterNumber
+            try reloadChaptersAndVerses(resetChapter: false)
+            persistReaderState()
+            refreshCompletedReadingsForToday()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func refreshProgressFromStorage() {
+        refreshCompletedReadingsForToday()
+    }
+
     func toggleCurrentChapterRead() {
         guard let selectedBookAbbrev else {
+            return
+        }
+
+        guard let progressService, let progressionService else {
+            errorMessage = "Bible progress tracking is not ready yet. Please try again."
             return
         }
 
@@ -248,14 +276,14 @@ final class BibleReaderViewModel {
 
         do {
             if isCurrentChapterRead {
-                try progressService?.removeCompletedReadingSessionForToday(
+                try progressService.removeCompletedReadingSessionForToday(
                     bookAbbrev: selectedBookAbbrev,
                     chapterIndex: selectedChapterNumber
                 )
                 completedTodayChapterIDs.remove(id)
                 rewardMessage = nil
             } else if let selectedBook {
-                let claimResult = try progressionService?.claimChapterCompletionReward(
+                let claimResult = try progressionService.claimChapterCompletionReward(
                     language: selectedLanguage,
                     bookAbbrev: selectedBook.abbrev,
                     chapterIndex: selectedChapterNumber,
@@ -263,22 +291,47 @@ final class BibleReaderViewModel {
                     coinsAwarded: 1
                 )
 
-                try progressService?.saveCompletedReadingSession(
+                try progressService.saveCompletedReadingSession(
                     bibleLanguage: selectedLanguage,
                     bookAbbrev: selectedBook.abbrev,
                     bookName: selectedBook.name,
                     chapterIndex: selectedChapterNumber,
-                    xpEarned: claimResult?.xpAwarded ?? 0,
-                    coinsEarned: claimResult?.coinsAwarded ?? 0
+                    xpEarned: claimResult.xpAwarded,
+                    coinsEarned: claimResult.coinsAwarded
                 )
                 completedTodayChapterIDs.insert(id)
-                rewardMessage = rewardMessage(for: claimResult)
+                var messages = [rewardMessage(for: claimResult)]
+                if let planResult = try markPlanReadingComplete(
+                    bookAbbrev: selectedBook.abbrev,
+                    chapterNumber: selectedChapterNumber
+                ) {
+                    messages.append(planRewardMessage(for: planResult))
+                }
+                rewardMessage = messages.joined(separator: "\n")
             }
 
+            refreshCompletedReadingsForToday()
+            ReadingActivitySignal.send()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func markPlanReadingComplete(
+        bookAbbrev: String,
+        chapterNumber: Int
+    ) throws -> PlanDayCompletionResult? {
+        guard let readingPlanService,
+              let progressionService else {
+            return nil
+        }
+
+        return try readingPlanService.markReadingComplete(
+            bookAbbrev: bookAbbrev,
+            chapterNumber: chapterNumber,
+            progressionService: progressionService
+        )
     }
 
     private func reloadChaptersAndVerses(resetChapter: Bool) throws {
@@ -344,6 +397,18 @@ final class BibleReaderViewModel {
         }
 
         return "Chapter marked read. Rewards already claimed."
+    }
+
+    private func planRewardMessage(for result: PlanDayCompletionResult) -> String {
+        if result.didCompleteDay, let rewardResult = result.rewardResult, rewardResult.didAwardRewards {
+            return "Day \(result.dayNumber) complete: +\(rewardResult.xpAwarded) XP and +\(rewardResult.coinsAwarded) coins."
+        }
+
+        if result.didCompleteDay {
+            return "Day \(result.dayNumber) of \(result.planName) is complete."
+        }
+
+        return "Plan progress: \(result.completedCount)/\(result.requiredCount) readings complete."
     }
 
     private func persistReaderState() {

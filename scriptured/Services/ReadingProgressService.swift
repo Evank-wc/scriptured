@@ -43,6 +43,11 @@ struct ReadingProgressService: ReadingProgressServicing {
             bookAbbrev: bookAbbrev,
             chapterIndex: chapterIndex
         ) {
+            if xpEarned > existingSession.xpEarned || coinsEarned > existingSession.coinsEarned {
+                existingSession.xpEarned = max(existingSession.xpEarned, xpEarned)
+                existingSession.coinsEarned = max(existingSession.coinsEarned, coinsEarned)
+                try modelContext.save()
+            }
             return existingSession
         }
 

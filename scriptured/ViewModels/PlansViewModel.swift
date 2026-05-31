@@ -10,6 +10,7 @@ final class PlansViewModel {
 
     private(set) var plans: [ReadingPlanFile] = []
     private(set) var activePlan: UserReadingPlan?
+    private(set) var selectedPlanId: String?
     private(set) var currentActiveDayNumber: Int?
     private(set) var startedPlanIds: Set<String> = []
     private(set) var decodingErrors: [String] = []
@@ -20,11 +21,11 @@ final class PlansViewModel {
     }
 
     var selectedPlan: ReadingPlanFile? {
-        guard let activePlan else {
+        guard let selectedPlanId else {
             return nil
         }
 
-        return plans.first { $0.id == activePlan.planId }
+        return plans.first { $0.id == selectedPlanId }
     }
 
     var otherPlans: [ReadingPlanFile] {
@@ -56,16 +57,43 @@ final class PlansViewModel {
     }
 
     func isSelectedPlan(planId: String) -> Bool {
-        activePlan?.planId == planId
+        selectedPlanId == planId
     }
 
     func startPlan(_ plan: ReadingPlanFile) {
         guard let readingPlanService else {
+            errorMessage = "Reading plan service is not ready."
             return
         }
 
         do {
+            selectedPlanId = plan.id
             _ = try readingPlanService.startPlan(plan)
+            ReadingActivitySignal.send()
+            refreshProgressState()
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+            refreshProgressState()
+        }
+    }
+
+    func refreshSelectionState() {
+        refreshProgressState()
+    }
+
+    func unselectPlan() {
+        guard let readingPlanService else {
+            errorMessage = "Reading plan service is not ready."
+            return
+        }
+
+        do {
+            try readingPlanService.unselectPlan()
+            ReadingActivitySignal.send()
+            selectedPlanId = nil
+            activePlan = nil
+            currentActiveDayNumber = nil
             refreshProgressState()
             errorMessage = nil
         } catch {
@@ -93,10 +121,12 @@ final class PlansViewModel {
             }
             startedPlanIds = startedIds
             activePlan = try readingPlanService.getActivePlan()
+            selectedPlanId = readingPlanService.selectedPlanId() ?? activePlan?.planId
             currentActiveDayNumber = try readingPlanService.getCurrentDayForActivePlan()
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
+            selectedPlanId = readingPlanService.selectedPlanId() ?? selectedPlanId
         }
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct BibleReaderView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(ReadingActivitySignal.revisionKey) private var readingActivityRevision = 0
     @State private var viewModel: BibleReaderViewModel
     @State private var isShowingSettings = false
 
@@ -75,15 +76,19 @@ struct BibleReaderView: View {
                     .presentationDetents([.medium])
             }
         }
-        .task {
+        .onAppear {
             viewModel.configure(
                 progressService: ReadingProgressService(modelContext: modelContext),
-                progressionService: ProgressionService(modelContext: modelContext)
+                progressionService: ProgressionService(modelContext: modelContext),
+                readingPlanService: ReadingPlanService(modelContext: modelContext)
             )
             viewModel.load()
         }
         .onChange(of: viewModel.rewardMessage) { _, message in
             dismissRewardBannerAutomatically(message)
+        }
+        .onChange(of: readingActivityRevision) { _, _ in
+            viewModel.refreshProgressFromStorage()
         }
     }
 

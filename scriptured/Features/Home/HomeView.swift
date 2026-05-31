@@ -3,19 +3,23 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(ReadingActivitySignal.revisionKey) private var readingActivityRevision = 0
     @State private var viewModel: HomeViewModel
 
     private let onContinueReading: () -> Void
     private let onOpenReadingPlan: () -> Void
+    private let onOpenPlanReading: (PlanReadingReference) -> Void
 
     init(
         viewModel: HomeViewModel,
         onContinueReading: @escaping () -> Void = {},
-        onOpenReadingPlan: @escaping () -> Void = {}
+        onOpenReadingPlan: @escaping () -> Void = {},
+        onOpenPlanReading: @escaping (PlanReadingReference) -> Void = { _ in }
     ) {
         _viewModel = State(initialValue: viewModel)
         self.onContinueReading = onContinueReading
         self.onOpenReadingPlan = onOpenReadingPlan
+        self.onOpenPlanReading = onOpenPlanReading
     }
 
     var body: some View {
@@ -32,6 +36,7 @@ struct HomeView: View {
                         header
                         streakHero
                         actionButtons
+                        currentPlanCard
                         progressCard
                         todayGoalCard
                         statsRow
@@ -52,8 +57,12 @@ struct HomeView: View {
                 progressionService: ProgressionService(modelContext: modelContext),
                 streakService: StreakService(modelContext: modelContext),
                 readingProgressService: ReadingProgressService(modelContext: modelContext),
-                bibleService: BibleService()
+                bibleService: BibleService(),
+                readingPlanService: ReadingPlanService(modelContext: modelContext)
             )
+            viewModel.loadStats()
+        }
+        .onChange(of: readingActivityRevision) { _, _ in
             viewModel.loadStats()
         }
     }
@@ -90,15 +99,11 @@ struct HomeView: View {
     }
 
     private var actionButtons: some View {
-        VStack(spacing: AppTheme.Spacing.medium) {
-            PrimaryGameButton(
-                title: viewModel.streakStatus.hasCompletedToday ? "Read another chapter" : "Protect your streak",
-                systemImage: viewModel.streakStatus.hasCompletedToday ? "book.fill" : "flame.fill",
-                action: onContinueReading
-            )
-
-            SecondaryGameButton(title: "Current Plan", systemImage: "calendar", action: onOpenReadingPlan)
-        }
+        PrimaryGameButton(
+            title: viewModel.streakStatus.hasCompletedToday ? "Read another chapter" : "Protect your streak",
+            systemImage: viewModel.streakStatus.hasCompletedToday ? "book.fill" : "flame.fill",
+            action: onContinueReading
+        )
     }
 
     private var progressCard: some View {
@@ -131,9 +136,9 @@ struct HomeView: View {
         GameCard(gradient: AppTheme.Gradients.creamGlow) {
             VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
                 HStack(spacing: AppTheme.Spacing.small) {
-                    Image(systemName: viewModel.streakStatus.hasCompletedToday ? "checkmark.seal.fill" : "target")
+                    Image(systemName: viewModel.todayPlanAssignment?.isComplete == true ? "checkmark.seal.fill" : "target")
                         .font(.title3.weight(.bold))
-                        .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? AppTheme.Colors.meadow : AppTheme.Colors.coral)
+                        .foregroundStyle(viewModel.todayPlanAssignment?.isComplete == true ? AppTheme.Colors.meadow : AppTheme.Colors.coral)
 
                     Text(viewModel.todayGoalTitle)
                         .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
@@ -141,17 +146,18 @@ struct HomeView: View {
 
                     Spacer()
 
-                    Text(viewModel.streakStatus.hasCompletedToday ? "1/1" : "0/1")
-                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
-                        .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? AppTheme.Colors.meadow : AppTheme.Colors.coral)
-                        .monospacedDigit()
+                    Text(viewModel.todayPlanProgressText)
+                        .font(AppTheme.Typography.rounded(.caption, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.meadow)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                 }
 
                 XPProgressBar(
-                    currentXP: Int(viewModel.todayGoalProgress),
-                    requiredXP: 1,
-                    unitLabel: "Chapter",
-                    accessibilityLabel: "Daily goal progress"
+                    currentXP: viewModel.todayPlanAssignment?.completedReadingKeys.count ?? Int(viewModel.todayGoalProgress),
+                    requiredXP: max(viewModel.todayPlanAssignment?.readings.count ?? 1, 1),
+                    unitLabel: "readings",
+                    accessibilityLabel: "Daily plan progress"
                 )
 
                 Text(viewModel.todayGoalMessage)
@@ -159,6 +165,98 @@ struct HomeView: View {
                     .foregroundStyle(AppTheme.Colors.softText)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private var currentPlanCard: some View {
+        GameCard(gradient: viewModel.todayPlanAssignment == nil ? AppTheme.Gradients.creamGlow : nil) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+                if let assignment = viewModel.todayPlanAssignment {
+                    selectedPlanContent(assignment)
+                } else {
+                    noPlanContent
+                }
+            }
+        }
+    }
+
+    private func selectedPlanContent(_ assignment: ReadingPlanTodayAssignment) -> some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xSmall) {
+                    Text("Current Plan")
+                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.ink)
+                    Text("\(assignment.plan.name) • Day \(assignment.dayNumber)")
+                        .font(AppTheme.Typography.rounded(.caption, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.softText)
+                }
+                Spacer()
+                if assignment.isComplete {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(AppTheme.Colors.meadow)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
+                ForEach(assignment.readings.prefix(6)) { reading in
+                    PlanReadingRow(
+                        reading: reading,
+                        isComplete: assignment.completedReadingKeys.contains(reading.readingKey)
+                    )
+                }
+
+                if assignment.readings.count > 6 {
+                    Text("+\(assignment.readings.count - 6) more readings")
+                        .font(AppTheme.Typography.rounded(.caption, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.softText)
+                }
+            }
+
+            if let planActionMessage = viewModel.planActionMessage {
+                Text(planActionMessage)
+                    .font(AppTheme.Typography.rounded(.caption, weight: .heavy))
+                    .foregroundStyle(AppTheme.Colors.meadow)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let nextPlanReading = viewModel.nextPlanReading {
+                PrimaryGameButton(
+                    title: assignment.isComplete ? "Review Assigned Chapter" : "Read Assigned Chapter",
+                    systemImage: "book.fill"
+                ) {
+                    onOpenPlanReading(nextPlanReading)
+                }
+            }
+
+            SecondaryGameButton(
+                title: assignment.isComplete ? "Plan Done Today" : "Mark Today’s Plan Done",
+                systemImage: assignment.isComplete ? "checkmark.seal.fill" : "checkmark.circle.fill"
+            ) {
+                viewModel.completeTodayPlan()
+            }
+        }
+    }
+
+    private var noPlanContent: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+            HStack(spacing: AppTheme.Spacing.medium) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(AppTheme.Colors.meadow)
+
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.xSmall) {
+                    Text("Choose a reading plan")
+                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.ink)
+                    Text("A plan gives you one clear reading target for today.")
+                        .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
+                        .foregroundStyle(AppTheme.Colors.softText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            SecondaryGameButton(title: "Browse Plans", systemImage: "calendar", action: onOpenReadingPlan)
         }
     }
 
@@ -177,6 +275,23 @@ struct HomeView: View {
                 systemImage: "checkmark.seal.fill",
                 tint: AppTheme.Colors.sunrise
             )
+        }
+    }
+}
+
+private struct PlanReadingRow: View {
+    let reading: PlanReadingReference
+    let isComplete: Bool
+
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.small) {
+            Image(systemName: isComplete ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isComplete ? AppTheme.Colors.meadow : AppTheme.Colors.softText)
+            Text(reading.displayText)
+                .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
+                .foregroundStyle(AppTheme.Colors.ink)
+                .lineLimit(2)
+            Spacer(minLength: 0)
         }
     }
 }

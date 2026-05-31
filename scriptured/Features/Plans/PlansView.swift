@@ -38,6 +38,7 @@ struct PlansView: View {
             viewModel.configure(
                 readingPlanService: ReadingPlanService(modelContext: modelContext)
             )
+            viewModel.refreshSelectionState()
         }
     }
 
@@ -50,18 +51,31 @@ struct PlansView: View {
                     decodingErrorCard
                 }
 
+                if let errorMessage = viewModel.errorMessage {
+                    selectionErrorCard(errorMessage)
+                }
+
                 if let selectedPlan = viewModel.selectedPlan {
                     planSection(title: "Selected Plan") {
-                        NavigationLink {
-                            PlanDetailView(plan: selectedPlan, viewModel: viewModel)
-                        } label: {
-                            PlanListCard(
-                                plan: selectedPlan,
-                                status: selectedPlanStatus,
-                                isSelected: true
-                            )
+                        VStack(spacing: AppTheme.Spacing.medium) {
+                            NavigationLink {
+                                PlanDetailView(plan: selectedPlan, viewModel: viewModel)
+                            } label: {
+                                PlanListCard(
+                                    plan: selectedPlan,
+                                    status: selectedPlanStatus,
+                                    isSelected: true
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            SecondaryGameButton(
+                                title: "Unselect Plan",
+                                systemImage: "xmark.circle.fill"
+                            ) {
+                                viewModel.unselectPlan()
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
 
@@ -133,6 +147,15 @@ struct PlansView: View {
                 .foregroundStyle(AppTheme.Colors.ink)
 
             content()
+        }
+    }
+
+    private func selectionErrorCard(_ message: String) -> some View {
+        GameCard {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(AppTheme.Typography.rounded(.subheadline, weight: .heavy))
+                .foregroundStyle(AppTheme.Colors.coral)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -248,11 +271,19 @@ private struct PlanDetailView: View {
     }
 
     private var selectButton: some View {
-        PrimaryGameButton(
-            title: viewModel.isSelectedPlan(planId: plan.id) ? "Selected Plan" : viewModel.isPlanStarted(planId: plan.id) ? "Select Saved Plan" : "Select Plan",
-            systemImage: viewModel.isSelectedPlan(planId: plan.id) ? "checkmark.seal.fill" : "play.fill"
-        ) {
-            viewModel.startPlan(plan)
+        VStack(spacing: AppTheme.Spacing.medium) {
+            PrimaryGameButton(
+                title: viewModel.isSelectedPlan(planId: plan.id) ? "Selected Plan" : viewModel.isPlanStarted(planId: plan.id) ? "Select Saved Plan" : "Select Plan",
+                systemImage: viewModel.isSelectedPlan(planId: plan.id) ? "checkmark.seal.fill" : "play.fill"
+            ) {
+                viewModel.startPlan(plan)
+            }
+
+            if viewModel.isSelectedPlan(planId: plan.id) {
+                SecondaryGameButton(title: "Unselect Plan", systemImage: "xmark.circle.fill") {
+                    viewModel.unselectPlan()
+                }
+            }
         }
     }
 
