@@ -5,12 +5,15 @@ struct ShopView: View {
 
     var body: some View {
         NavigationStack {
-            ContentUnavailableView(
-                viewModel.title,
-                systemImage: "bag",
-                description: Text("Shop placeholder")
+            EmptyStateView(
+                title: viewModel.title,
+                message: "Shop placeholder",
+                systemImage: "bag"
             )
+            .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
             .navigationTitle(viewModel.title)
+            .toolbarBackground(AppTheme.Colors.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 }

@@ -52,6 +52,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.profile)
         }
+        .tint(AppTheme.Colors.meadow)
     }
 }
 

@@ -21,236 +21,193 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.large) {
                     if let errorMessage = viewModel.errorMessage {
-                        ContentUnavailableView(
-                            "Dashboard Unavailable",
-                            systemImage: "exclamationmark.triangle",
-                            description: Text(errorMessage)
+                        EmptyStateView(
+                            title: "Dashboard unavailable",
+                            message: errorMessage,
+                            systemImage: "exclamationmark.triangle"
                         )
                     } else {
+                        header
                         streakHero
                         actionButtons
+                        progressCard
                         todayGoalCard
-                        levelCard
-                        currencyRow
+                        statsRow
                     }
                 }
-                .padding(16)
+                .padding(.horizontal, AppTheme.Spacing.large)
+                .padding(.top, AppTheme.Spacing.small)
+                .padding(.bottom, AppTheme.Spacing.large)
             }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle(viewModel.title)
+            .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppTheme.Colors.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
         .onAppear {
             viewModel.configure(
                 progressionService: ProgressionService(modelContext: modelContext),
-                streakService: StreakService(modelContext: modelContext)
+                streakService: StreakService(modelContext: modelContext),
+                readingProgressService: ReadingProgressService(modelContext: modelContext),
+                bibleService: BibleService()
             )
             viewModel.loadStats()
         }
     }
 
-    private var streakHero: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 42, weight: .bold))
-                            .foregroundStyle(.orange)
+    private var header: some View {
+        HStack(alignment: .center, spacing: AppTheme.Spacing.medium) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.xSmall) {
+                Text("Dashboard")
+                    .font(AppTheme.Typography.rounded(.largeTitle, weight: .black))
+                    .foregroundStyle(AppTheme.Colors.ink)
 
-                        Text("\(viewModel.streakStatus.currentStreak)")
-                            .font(.system(size: 56, weight: .heavy, design: .rounded))
-                            .monospacedDigit()
-                    }
-
-                    Text(viewModel.streakStatus.currentStreak == 1 ? "day streak" : "day streak")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 6) {
-                    Label("\(viewModel.streakStatus.streakFreezesAvailable)", systemImage: "snowflake")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.blue)
-
-                    Text("freezes")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
+                Text(viewModel.streakStatus.hasCompletedToday ? "You are done for today" : "One chapter keeps the fire alive")
+                    .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(viewModel.statusMessage)
-                    .font(.title3.weight(.bold))
+            Spacer(minLength: AppTheme.Spacing.small)
 
-                Text(viewModel.urgencyMessage)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? Color.secondary : Color.orange)
-            }
-
-            HStack(spacing: 10) {
-                DashboardPill(
-                    title: "Longest",
-                    value: "\(viewModel.streakStatus.longestStreak)",
-                    systemImage: "trophy.fill",
-                    tint: .yellow
-                )
-
-                DashboardPill(
-                    title: "Today",
-                    value: viewModel.streakStatus.hasCompletedToday ? "Safe" : "Open",
-                    systemImage: viewModel.streakStatus.hasCompletedToday ? "shield.fill" : "bolt.fill",
-                    tint: viewModel.streakStatus.hasCompletedToday ? .green : .orange
-                )
-            }
+            CoinBalancePill(coins: viewModel.coins, label: "coins")
         }
-        .padding(18)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var streakHero: some View {
+        StreakHeroCard(
+            streak: viewModel.streakStatus.currentStreak,
+            longestStreak: viewModel.streakStatus.longestStreak,
+            freezesAvailable: viewModel.streakStatus.streakFreezesAvailable,
+            hasCompletedToday: viewModel.streakStatus.hasCompletedToday,
+            isAtRisk: viewModel.streakStatus.isAtRisk,
+            title: viewModel.statusMessage,
+            message: viewModel.urgencyMessage
+        )
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 12) {
-            Button(action: onContinueReading) {
-                Label("Continue Reading", systemImage: "book.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
+        VStack(spacing: AppTheme.Spacing.medium) {
+            PrimaryGameButton(
+                title: viewModel.streakStatus.hasCompletedToday ? "Read another chapter" : "Protect your streak",
+                systemImage: viewModel.streakStatus.hasCompletedToday ? "book.fill" : "flame.fill",
+                action: onContinueReading
+            )
 
-            Button(action: onOpenReadingPlan) {
-                Label("Current Plan", systemImage: "calendar")
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
+            SecondaryGameButton(title: "Current Plan", systemImage: "calendar", action: onOpenReadingPlan)
         }
-        .controlSize(.large)
+    }
+
+    private var progressCard: some View {
+        GameCard {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+                HStack(alignment: .center) {
+                    LevelBadge(level: viewModel.currentLevel)
+
+                    Spacer()
+
+                    Text("\(viewModel.totalXP) XP")
+                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.sky)
+                        .monospacedDigit()
+                }
+
+                XPProgressBar(
+                    currentXP: viewModel.xpProgress.currentXP,
+                    requiredXP: viewModel.xpProgress.requiredXP
+                )
+
+                Text("Keep reading to reach Level \(viewModel.currentLevel + 1).")
+                    .font(AppTheme.Typography.rounded(.footnote, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+            }
+        }
     }
 
     private var todayGoalCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(viewModel.todayGoalTitle, systemImage: "target")
-                    .font(.headline.weight(.semibold))
+        GameCard(gradient: AppTheme.Gradients.creamGlow) {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
+                HStack(spacing: AppTheme.Spacing.small) {
+                    Image(systemName: viewModel.streakStatus.hasCompletedToday ? "checkmark.seal.fill" : "target")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? AppTheme.Colors.meadow : AppTheme.Colors.coral)
 
-                Spacer()
+                    Text(viewModel.todayGoalTitle)
+                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.ink)
 
-                Text(viewModel.streakStatus.hasCompletedToday ? "1/1" : "0/1")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? .green : .orange)
+                    Spacer()
+
+                    Text(viewModel.streakStatus.hasCompletedToday ? "1/1" : "0/1")
+                        .font(AppTheme.Typography.rounded(.headline, weight: .heavy))
+                        .foregroundStyle(viewModel.streakStatus.hasCompletedToday ? AppTheme.Colors.meadow : AppTheme.Colors.coral)
+                        .monospacedDigit()
+                }
+
+                XPProgressBar(
+                    currentXP: Int(viewModel.todayGoalProgress),
+                    requiredXP: 1,
+                    unitLabel: "Chapter",
+                    accessibilityLabel: "Daily goal progress"
+                )
+
+                Text(viewModel.todayGoalMessage)
+                    .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            ProgressView(value: viewModel.todayGoalProgress, total: 1)
-                .tint(viewModel.streakStatus.hasCompletedToday ? .green : .orange)
-
-            Text(viewModel.todayGoalMessage)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
         }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private var levelCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Level \(viewModel.currentLevel)")
-                    .font(.title2.weight(.semibold))
-
-                Spacer()
-
-                Text("\(viewModel.totalXP) XP")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            ProgressView(
-                value: Double(viewModel.xpProgress.currentXP),
-                total: Double(viewModel.xpProgress.requiredXP)
-            )
-            .tint(.blue)
-
-            Text("\(viewModel.xpProgress.currentXP) / \(viewModel.xpProgress.requiredXP) XP to Level \(viewModel.currentLevel + 1)")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-    }
-
-    private var currencyRow: some View {
-        HStack(spacing: 12) {
-            StatTile(
-                title: "Coins",
-                value: "\(viewModel.coins)",
-                systemImage: "circle.hexagongrid.fill",
-                tint: .yellow
+    private var statsRow: some View {
+        HStack(spacing: AppTheme.Spacing.medium) {
+            SmallStatCard(
+                title: "Chapters Read",
+                value: viewModel.chapterProgressValue,
+                systemImage: "book.pages.fill",
+                tint: AppTheme.Colors.meadow
             )
 
-            StatTile(
-                title: "Lifetime Coins",
-                value: "\(viewModel.lifetimeCoins)",
-                systemImage: "sparkles",
-                tint: .purple
+            SmallStatCard(
+                title: "Daily Goals",
+                value: "\(viewModel.dailyGoalsCompleted)",
+                systemImage: "checkmark.seal.fill",
+                tint: AppTheme.Colors.sunrise
             )
         }
     }
 }
 
-private struct DashboardPill: View {
+private struct SmallStatCard: View {
     let title: String
     let value: String
     let systemImage: String
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .foregroundStyle(tint)
+        GameCard {
+            VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(tint)
 
-            VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(.subheadline.weight(.bold))
+                    .font(AppTheme.Typography.rounded(.title3, weight: .heavy))
+                    .foregroundStyle(AppTheme.Colors.ink)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
                 Text(title)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(AppTheme.Typography.rounded(.caption, weight: .bold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
-private struct StatTile: View {
-    let title: String
-    let value: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(tint)
-
-            Text(value)
-                .font(.title3.weight(.semibold))
-
-            Text(title)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

@@ -6,10 +6,15 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		3B31E0A82FCBF65100EF7543 /* DESIGN_BRIEF.md in Sources */ = {isa = PBXBuildFile; fileRef = 3B31E0A62FCBF64600EF7543 /* DESIGN_BRIEF.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		3B31E01F2FCB35BA00EF7543 /* scriptured.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = scriptured.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B31E0A42FCB59EA00EF7543 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		3B31E0A52FCB5A0D00EF7543 /* CODEX_HANDOFF.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CODEX_HANDOFF.md; sourceTree = "<group>"; };
+		3B31E0A62FCBF64600EF7543 /* DESIGN_BRIEF.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = DESIGN_BRIEF.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -37,6 +42,7 @@
 				3B31E0212FCB35BA00EF7543 /* scriptured */,
 				3B31E0202FCB35BA00EF7543 /* Products */,
 				3B31E0A32FCB59D000EF7543 /* docs */,
+				3B31E0AA2FCBF76700EF7543 /* Components */,
 			);
 			sourceTree = "<group>";
 		};
@@ -53,8 +59,16 @@
 			children = (
 				3B31E0A42FCB59EA00EF7543 /* README.md */,
 				3B31E0A52FCB5A0D00EF7543 /* CODEX_HANDOFF.md */,
+				3B31E0A62FCBF64600EF7543 /* DESIGN_BRIEF.md */,
 			);
 			path = docs;
+			sourceTree = "<group>";
+		};
+		3B31E0AA2FCBF76700EF7543 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Components;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -131,6 +145,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3B31E0A82FCBF65100EF7543 /* DESIGN_BRIEF.md in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -12,30 +12,49 @@ struct BibleReaderView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if let errorMessage = viewModel.errorMessage {
-                    ContentUnavailableView(
-                        "Bible Unavailable",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text(errorMessage)
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.verses.isEmpty {
-                    ContentUnavailableView(
-                        "No Verses Loaded",
-                        systemImage: "book.closed",
-                        description: Text("Choose a book and chapter to begin reading")
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    verseList
-                }
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    if let errorMessage = viewModel.errorMessage {
+                        EmptyStateView(
+                            title: "Bible unavailable",
+                            message: errorMessage,
+                            systemImage: "exclamationmark.triangle"
+                        )
+                    } else if viewModel.verses.isEmpty {
+                        EmptyStateView(
+                            title: "No verses loaded",
+                            message: "Choose a book and chapter to begin reading.",
+                            systemImage: "book.closed"
+                        )
+                    } else {
+                        readerHeader
+                        verseList
+                    }
 
-                bottomControls
+                    bottomControls
+                }
+                .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
+
+                if let rewardMessage = viewModel.rewardMessage {
+                    RewardBanner(
+                        message: rewardMessage,
+                        systemImage: rewardMessage.contains("+") ? "sparkles" : "checkmark.seal.fill",
+                        tint: rewardMessage.contains("+") ? AppTheme.Colors.sunrise : AppTheme.Colors.meadow
+                    )
+                    .padding(.horizontal, AppTheme.Spacing.large)
+                    .padding(.top, AppTheme.Spacing.small)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            viewModel.rewardMessage = nil
+                        }
+                    }
+                    .zIndex(1)
+                }
             }
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(AppTheme.Colors.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     navigationPickerHeader
@@ -45,7 +64,8 @@ struct BibleReaderView: View {
                     Button {
                         isShowingSettings = true
                     } label: {
-                        Image(systemName: "gearshape")
+                        Image(systemName: "gearshape.fill")
+                            .foregroundStyle(AppTheme.Colors.meadow)
                     }
                     .accessibilityLabel("Bible reader settings")
                 }
@@ -62,89 +82,112 @@ struct BibleReaderView: View {
             )
             viewModel.load()
         }
-        .alert(
-            "Reading Progress",
-            isPresented: Binding(
-                get: { viewModel.rewardMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.rewardMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button("OK", role: .cancel) {
-                viewModel.rewardMessage = nil
-            }
-        } message: {
-            Text(viewModel.rewardMessage ?? "")
+        .onChange(of: viewModel.rewardMessage) { _, message in
+            dismissRewardBannerAutomatically(message)
         }
     }
 
     private var navigationPickerHeader: some View {
-        HStack(spacing: 8) {
-            Menu {
+        HStack(spacing: AppTheme.Spacing.xSmall) {
+            selectorMenu(
+                title: viewModel.selectedBook?.name ?? "Book",
+                maxWidth: 158,
+                isDisabled: viewModel.books.isEmpty
+            ) {
                 ForEach(viewModel.books) { book in
                     Button(book.name) {
                         viewModel.selectBook(abbrev: book.abbrev)
                     }
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(viewModel.selectedBook?.name ?? "Book")
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: 158, alignment: .leading)
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 5)
-                .contentShape(Rectangle())
             }
-            .disabled(viewModel.books.isEmpty)
 
-            Menu {
+            selectorMenu(
+                title: "\(viewModel.selectedChapterNumber)",
+                maxWidth: 58,
+                isDisabled: viewModel.chapters.isEmpty
+            ) {
                 ForEach(viewModel.chapters) { chapter in
                     Button("\(chapter.number)") {
                         viewModel.selectChapter(number: chapter.number)
                     }
                 }
-            } label: {
-                HStack(spacing: 3) {
-                    Text("\(viewModel.selectedChapterNumber)")
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .frame(width: 24, alignment: .trailing)
-
-                    Image(systemName: "chevron.down")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.primary)
-                }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 5)
-                .contentShape(Rectangle())
             }
-            .disabled(viewModel.chapters.isEmpty)
         }
-        .font(.headline.weight(.semibold))
-        .foregroundStyle(Color(.label))
-        .frame(width: 224, alignment: .leading)
+        .frame(width: 236, alignment: .leading)
+    }
+
+    private func selectorMenu<Content: View>(
+        title: String,
+        maxWidth: CGFloat,
+        isDisabled: Bool,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu(content: content) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(AppTheme.Typography.rounded(.subheadline, weight: .heavy))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: maxWidth, alignment: .leading)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.bold))
+            }
+            .foregroundStyle(AppTheme.Colors.ink)
+            .padding(.horizontal, AppTheme.Spacing.small)
+            .padding(.vertical, AppTheme.Spacing.xSmall)
+            .background(AppTheme.Colors.mint.opacity(0.9), in: Capsule())
+            .overlay {
+                Capsule().stroke(AppTheme.Colors.leaf.opacity(0.32), lineWidth: 1)
+            }
+        }
+        .disabled(isDisabled)
+    }
+
+    private var readerHeader: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(viewModel.currentReference)
+                        .font(AppTheme.Typography.rounded(.title2, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+
+                    Text(viewModel.selectedLanguage.version.displayName)
+                        .font(AppTheme.Typography.rounded(.caption, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.softText)
+                }
+
+                Spacer()
+
+                if viewModel.isCurrentChapterRead {
+                    Label("Done", systemImage: "checkmark.seal.fill")
+                        .font(AppTheme.Typography.rounded(.caption, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.meadow)
+                        .padding(.horizontal, AppTheme.Spacing.small)
+                        .padding(.vertical, AppTheme.Spacing.xSmall)
+                        .background(AppTheme.Colors.mint, in: Capsule())
+                }
+            }
+        }
+        .padding(.horizontal, AppTheme.Spacing.large)
+        .padding(.top, AppTheme.Spacing.medium)
+        .padding(.bottom, AppTheme.Spacing.small)
     }
 
     private var verseList: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: AppTheme.Spacing.medium) {
                     ForEach(viewModel.verses) { verse in
                         VerseRow(verse: verse, fontSize: viewModel.fontSize)
                             .id(verse.id)
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 20)
+                .padding(.horizontal, AppTheme.Spacing.large)
+                .padding(.vertical, AppTheme.Spacing.medium)
+                .padding(.bottom, AppTheme.Spacing.xLarge)
             }
             .onChange(of: viewModel.selectedChapterNumber) { _, _ in
                 scrollToFirstVerse(using: proxy)
@@ -156,67 +199,53 @@ struct BibleReaderView: View {
     }
 
     private var bottomControls: some View {
-        HStack(spacing: 16) {
-            Button {
-                viewModel.moveToPreviousChapter()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 36, height: 32)
+        VStack(spacing: AppTheme.Spacing.small) {
+            PrimaryGameButton(
+                title: viewModel.isCurrentChapterRead ? "Mark Unread" : "Complete Chapter",
+                systemImage: viewModel.isCurrentChapterRead ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill"
+            ) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                    viewModel.toggleCurrentChapterRead()
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(!viewModel.canMoveToPreviousChapter)
-            .accessibilityLabel("Previous chapter")
-
-            Spacer()
-
-            Button {
-                viewModel.toggleCurrentChapterRead()
-            } label: {
-                Label(
-                    viewModel.isCurrentChapterRead ? "Mark Unread" : "Mark Read",
-                    systemImage: viewModel.isCurrentChapterRead ? "arrow.uturn.backward.circle" : "checkmark.circle"
-                )
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.bordered)
-            .controlSize(.small)
             .disabled(viewModel.selectedBookAbbrev == nil || viewModel.verses.isEmpty)
+            .opacity(viewModel.selectedBookAbbrev == nil || viewModel.verses.isEmpty ? 0.58 : 1)
 
-            Spacer()
+            HStack(spacing: AppTheme.Spacing.medium) {
+                Button {
+                    viewModel.moveToPreviousChapter()
+                } label: {
+                    Label("Previous", systemImage: "chevron.left")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 44, height: 38)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .disabled(!viewModel.canMoveToPreviousChapter)
+                .accessibilityLabel("Previous chapter")
 
-            Button {
-                viewModel.moveToNextChapter()
-            } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 36, height: 32)
+                Text(viewModel.currentReference)
+                    .font(AppTheme.Typography.rounded(.footnote, weight: .bold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .frame(maxWidth: .infinity)
+
+                Button {
+                    viewModel.moveToNextChapter()
+                } label: {
+                    Label("Next", systemImage: "chevron.right")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 44, height: 38)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .disabled(!viewModel.canMoveToNextChapter)
+                .accessibilityLabel("Next chapter")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(!viewModel.canMoveToNextChapter)
-            .accessibilityLabel("Next chapter")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.bar)
-    }
-
-    private var bookSelection: Binding<String> {
-        Binding(
-            get: { viewModel.selectedBookAbbrev ?? "" },
-            set: { abbrev in
-                viewModel.selectBook(abbrev: abbrev)
-            }
-        )
-    }
-
-    private var chapterSelection: Binding<Int> {
-        Binding(
-            get: { viewModel.selectedChapterNumber },
-            set: { chapterNumber in
-                viewModel.selectChapter(number: chapterNumber)
-            }
-        )
+        .padding(AppTheme.Spacing.large)
+        .background(AppTheme.Colors.elevatedCard.opacity(0.96))
     }
 
     private func scrollToFirstVerse(using proxy: ScrollViewProxy) {
@@ -226,6 +255,23 @@ struct BibleReaderView: View {
 
         withAnimation(.snappy) {
             proxy.scrollTo(firstVerse.id, anchor: .top)
+        }
+    }
+
+    private func dismissRewardBannerAutomatically(_ message: String?) {
+        guard let message else {
+            return
+        }
+
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard viewModel.rewardMessage == message else {
+                return
+            }
+
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                viewModel.rewardMessage = nil
+            }
         }
     }
 }
@@ -250,19 +296,22 @@ private struct BibleReaderSettingsView: View {
                 Section("Text Size") {
                     HStack(spacing: 12) {
                         Image(systemName: "textformat.size.smaller")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.Colors.softText)
 
                         Slider(value: $viewModel.fontSize, in: 14...28, step: 1)
+                            .tint(AppTheme.Colors.meadow)
 
                         Image(systemName: "textformat.size.larger")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(AppTheme.Colors.softText)
                     }
 
                     Text("Preview text")
-                        .font(.system(size: viewModel.fontSize, weight: .regular, design: .serif))
-                        .foregroundStyle(.secondary)
+                        .font(AppTheme.Typography.reader(size: viewModel.fontSize))
+                        .foregroundStyle(AppTheme.Colors.softText)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
             .navigationTitle("Reader Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -290,19 +339,27 @@ private struct VerseRow: View {
     let fontSize: Double
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: AppTheme.Spacing.medium) {
             Text("\(verse.number)")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, alignment: .trailing)
+                .font(AppTheme.Typography.rounded(.caption, weight: .heavy))
+                .foregroundStyle(AppTheme.Colors.meadow)
+                .monospacedDigit()
+                .frame(width: 30, alignment: .trailing)
+                .accessibilityHidden(true)
 
             Text(verse.text)
-                .font(.system(size: fontSize, weight: .regular, design: .serif))
-                .lineSpacing(6)
+                .font(AppTheme.Typography.reader(size: fontSize))
+                .lineSpacing(7)
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 4)
+        .padding(AppTheme.Spacing.medium)
+        .background(AppTheme.Colors.elevatedCard, in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
+        .overlay(alignment: .leading) {
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
+                .stroke(AppTheme.Colors.mint.opacity(0.72), lineWidth: 1)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

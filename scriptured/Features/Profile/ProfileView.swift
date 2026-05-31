@@ -15,9 +15,15 @@ struct ProfileView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .tint(AppTheme.Colors.meadow)
                 }
+                .listRowBackground(AppTheme.Colors.elevatedCard)
             }
+            .scrollContentBackground(.hidden)
+            .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
             .navigationTitle(viewModel.title)
+            .toolbarBackground(AppTheme.Colors.pageBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
         }
     }
 }
