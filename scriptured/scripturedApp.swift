@@ -19,6 +19,8 @@ struct scripturedApp: App {
             UserStats.self,
             RewardTransaction.self,
             StreakState.self,
+            InventoryItem.self,
+            ActiveBoost.self,
             UserReadingPlan.self,
             UserReadingPlanDayProgress.self
         ])

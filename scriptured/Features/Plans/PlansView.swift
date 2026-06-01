@@ -112,16 +112,6 @@ struct PlansView: View {
                     .foregroundStyle(AppTheme.Colors.softText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: AppTheme.Spacing.small)
-
-            Text("\(viewModel.plans.count)")
-                .font(AppTheme.Typography.rounded(.title2, weight: .black))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-                .frame(width: 46, height: 46)
-                .background(AppTheme.Gradients.meadowGlow, in: Circle())
-                .accessibilityLabel("\(viewModel.plans.count) reading plans")
         }
     }
 
@@ -312,25 +302,16 @@ private struct PlanDayRow: View {
     let readings: [String]
 
     var body: some View {
-        HStack(alignment: .top, spacing: AppTheme.Spacing.medium) {
-            Text("\(dayNumber)")
-                .font(AppTheme.Typography.rounded(.caption, weight: .black))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-                .frame(width: 34, height: 34)
-                .background(AppTheme.Colors.meadow, in: Circle())
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.xSmall) {
+            Text("Day \(dayNumber)")
+                .font(AppTheme.Typography.rounded(.subheadline, weight: .heavy))
+                .foregroundStyle(AppTheme.Colors.ink)
 
-            VStack(alignment: .leading, spacing: AppTheme.Spacing.xSmall) {
-                Text("Day \(dayNumber)")
-                    .font(AppTheme.Typography.rounded(.subheadline, weight: .heavy))
-                    .foregroundStyle(AppTheme.Colors.ink)
-
-                ForEach(readings, id: \.self) { reading in
-                    Text(reading)
-                        .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
-                        .foregroundStyle(AppTheme.Colors.softText)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+            ForEach(readings, id: \.self) { reading in
+                Text(reading)
+                    .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
+                    .foregroundStyle(AppTheme.Colors.softText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.vertical, AppTheme.Spacing.xSmall)

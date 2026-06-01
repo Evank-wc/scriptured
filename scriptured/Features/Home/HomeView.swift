@@ -58,7 +58,8 @@ struct HomeView: View {
                 streakService: StreakService(modelContext: modelContext),
                 readingProgressService: ReadingProgressService(modelContext: modelContext),
                 bibleService: BibleService(),
-                readingPlanService: ReadingPlanService(modelContext: modelContext)
+                readingPlanService: ReadingPlanService(modelContext: modelContext),
+                shopService: ShopService(modelContext: modelContext)
             )
             viewModel.loadStats()
         }
@@ -73,16 +74,19 @@ struct HomeView: View {
                 Text("Dashboard")
                     .font(AppTheme.Typography.rounded(.largeTitle, weight: .black))
                     .foregroundStyle(AppTheme.Colors.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .layoutPriority(1)
 
                 Text(viewModel.streakStatus.hasCompletedToday ? "You are done for today" : "One chapter keeps the fire alive")
                     .font(AppTheme.Typography.rounded(.subheadline, weight: .semibold))
                     .foregroundStyle(AppTheme.Colors.softText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer(minLength: AppTheme.Spacing.small)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
             CoinBalancePill(coins: viewModel.coins, label: "coins")
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -125,9 +129,59 @@ struct HomeView: View {
                     requiredXP: viewModel.xpProgress.requiredXP
                 )
 
+                boostControls
+
                 Text("Keep reading to reach Level \(viewModel.currentLevel + 1).")
                     .font(AppTheme.Typography.rounded(.footnote, weight: .semibold))
                     .foregroundStyle(AppTheme.Colors.softText)
+            }
+        }
+    }
+
+    private var boostControls: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.small) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                if let remainingText = viewModel.boostRemainingText(at: context.date),
+                   let multiplier = viewModel.activeXPBoostMultiplier {
+                    Label("\(viewModel.multiplierText(multiplier)) XP active • \(remainingText) left", systemImage: "bolt.fill")
+                        .font(AppTheme.Typography.rounded(.subheadline, weight: .heavy))
+                        .foregroundStyle(AppTheme.Colors.grape)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Label("No XP boost active", systemImage: "bolt.slash")
+                        .font(AppTheme.Typography.rounded(.subheadline, weight: .bold))
+                        .foregroundStyle(AppTheme.Colors.softText)
+                }
+            }
+
+            if viewModel.xpBoostInventoryQuantity > 0 {
+                Menu {
+                    ForEach(viewModel.availableXPBoosts) { boost in
+                        Button("\(boost.name) (\(boost.inventoryQuantity))") {
+                            viewModel.activateXPBoost(boost)
+                        }
+                    }
+                } label: {
+                    Label("Activate XP Boost (\(viewModel.xpBoostInventoryQuantity))", systemImage: "bolt.fill")
+                        .font(AppTheme.Typography.rounded(.subheadline, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AppTheme.Spacing.small)
+                        .foregroundStyle(AppTheme.Colors.meadow)
+                        .background(AppTheme.Colors.mint.opacity(0.88), in: RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.medium, style: .continuous)
+                                .stroke(AppTheme.Colors.leaf.opacity(0.35), lineWidth: 1)
+                        }
+                }
+            }
+
+            if let boostActionMessage = viewModel.boostActionMessage {
+                Text(boostActionMessage)
+                    .font(AppTheme.Typography.rounded(.caption, weight: .heavy))
+                    .foregroundStyle(AppTheme.Colors.meadow)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

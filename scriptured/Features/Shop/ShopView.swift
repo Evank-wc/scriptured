@@ -8,20 +8,28 @@ struct ShopView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.large) {
                     shopHeader
-                    feedbackBanner
+                    boostStatus
                     shopSection(title: "Power-ups", items: viewModel.powerUps)
                     shopSection(title: "Outfits", items: viewModel.outfits)
                     shopSection(title: "Frames", items: viewModel.frames)
                     shopSection(title: "Titles", items: viewModel.titles)
                 }
-                .padding(AppTheme.Spacing.large)
+                .padding(.horizontal, AppTheme.Spacing.large)
+                .padding(.top, AppTheme.Spacing.small)
+                .padding(.bottom, AppTheme.Spacing.large)
             }
             .background(AppTheme.Gradients.pageGlow.ignoresSafeArea())
-            .navigationTitle(viewModel.title)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AppTheme.Colors.pageBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .onAppear {
                 viewModel.loadShop()
+            }
+            .overlay(alignment: .top) {
+                feedbackBanner
+                    .padding(.horizontal, AppTheme.Spacing.large)
+                    .padding(.top, AppTheme.Spacing.small)
             }
         }
     }
@@ -42,6 +50,14 @@ struct ShopView: View {
                 Spacer(minLength: AppTheme.Spacing.small)
 
                 CoinBalancePill(coins: viewModel.coins, label: "coins")
+            }
+        }
+    }
+
+    private var boostStatus: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            if let remainingText = viewModel.boostRemainingText(at: context.date) {
+                RewardBanner(message: "XP boost active: \(remainingText) left", systemImage: "bolt.fill", tint: AppTheme.Colors.grape)
             }
         }
     }
@@ -71,6 +87,7 @@ struct ShopView: View {
                             item: item,
                             canAfford: viewModel.coins >= item.price,
                             onPurchase: { viewModel.purchase(item) },
+                            onActivateBoost: { viewModel.activateXPBoost(item) },
                             onEquip: { viewModel.equip(item) }
                         )
                     }
@@ -84,6 +101,7 @@ private struct ShopItemRow: View {
     let item: ShopItem
     let canAfford: Bool
     let onPurchase: () -> Void
+    let onActivateBoost: () -> Void
     let onEquip: () -> Void
 
     var body: some View {
@@ -103,6 +121,10 @@ private struct ShopItemRow: View {
                                 statusPill("Equipped", systemImage: "checkmark.circle.fill", tint: AppTheme.Colors.leaf)
                             } else if item.isOwned, item.type.isCosmetic {
                                 statusPill("Owned", systemImage: "checkmark.seal.fill", tint: AppTheme.Colors.sky)
+                            } else if item.type == .streakFreeze {
+                                statusPill("Available \(item.inventoryQuantity)", systemImage: "snowflake", tint: AppTheme.Colors.sky)
+                            } else if item.type.isConsumable, item.inventoryQuantity > 0 {
+                                statusPill("Owned \(item.inventoryQuantity)", systemImage: "shippingbox.fill", tint: AppTheme.Colors.sky)
                             }
                         }
 
@@ -141,7 +163,20 @@ private struct ShopItemRow: View {
 
     @ViewBuilder
     private var actionButton: some View {
-        if item.type.isConsumable {
+        if item.type == .xpBoost, item.inventoryQuantity > 0 {
+            HStack(spacing: AppTheme.Spacing.small) {
+                Button(action: onActivateBoost) {
+                    Label("Activate", systemImage: "bolt.fill")
+                }
+                .buttonStyle(ShopActionButtonStyle(kind: .secondary))
+
+                Button(action: onPurchase) {
+                    Label("Buy", systemImage: "cart.fill")
+                }
+                .buttonStyle(ShopActionButtonStyle(kind: canAfford ? .primary : .disabled))
+                .disabled(!canAfford)
+            }
+        } else if item.type.isConsumable {
             Button(action: onPurchase) {
                 Label("Buy", systemImage: "cart.fill")
             }

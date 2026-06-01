@@ -11,6 +11,8 @@ protocol ProgressionServicing {
     func detectLevelUp(previousLevel: Int, newLevel: Int) -> Bool
     func grantLevelUpReward(for level: Int) throws
     func xpProgressForCurrentLevel(totalXP: Int) -> XPProgress
+    func activeXPBoost(now: Date) throws -> ActiveBoost?
+    func xpBoostRemainingTime(now: Date) throws -> TimeInterval?
     func chapterCompletionRewardKey(language: BibleLanguage, bookAbbrev: String, chapterIndex: Int) -> String
     func hasClaimedReward(rewardKey: String) throws -> Bool
     func claimChapterCompletionReward(
@@ -176,6 +178,27 @@ struct ProgressionService: ProgressionServicing {
         return XPProgress(currentXP: remainingXP, requiredXP: requiredXP)
     }
 
+    func activeXPBoost(now: Date = .now) throws -> ActiveBoost? {
+        try expireBoosts(now: now)
+        var descriptor = FetchDescriptor<ActiveBoost>(
+            predicate: #Predicate { boost in
+                boost.boostType == "xpBoost" && boost.endDate > now
+            },
+            sortBy: [SortDescriptor(\.endDate, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        descriptor.includePendingChanges = true
+        return try modelContext.fetch(descriptor).first
+    }
+
+    func xpBoostRemainingTime(now: Date = .now) throws -> TimeInterval? {
+        guard let boost = try activeXPBoost(now: now) else {
+            return nil
+        }
+
+        return max(boost.endDate.timeIntervalSince(now), 0)
+    }
+
     func chapterCompletionRewardKey(
         language: BibleLanguage,
         bookAbbrev: String,
@@ -211,9 +234,10 @@ struct ProgressionService: ProgressionServicing {
             )
         }
 
+        let finalXPAwarded = try boostedXPAmount(for: xpAwarded)
         let stats = try currentStats()
         let previousLevel = stats.currentLevel
-        stats.totalXP += max(xpAwarded, 0)
+        stats.totalXP += finalXPAwarded
         stats.currentLevel = calculateLevelFromXP(stats.totalXP)
         stats.coins += max(coinsAwarded, 0)
         stats.lifetimeCoins += max(coinsAwarded, 0)
@@ -226,7 +250,7 @@ struct ProgressionService: ProgressionServicing {
         let transaction = RewardTransaction(
             rewardKey: rewardKey,
             rewardType: "chapterCompletion",
-            xpAwarded: max(xpAwarded, 0),
+            xpAwarded: finalXPAwarded,
             coinsAwarded: max(coinsAwarded, 0)
         )
         modelContext.insert(transaction)
@@ -241,7 +265,7 @@ struct ProgressionService: ProgressionServicing {
         return RewardClaimResult(
             rewardKey: rewardKey,
             didAwardRewards: true,
-            xpAwarded: max(xpAwarded, 0),
+            xpAwarded: finalXPAwarded,
             coinsAwarded: max(coinsAwarded, 0),
             levelUpResult: levelUpResult
         )
@@ -265,9 +289,10 @@ struct ProgressionService: ProgressionServicing {
             )
         }
 
+        let finalXPAwarded = try boostedXPAmount(for: xpAwarded)
         let stats = try currentStats()
         let previousLevel = stats.currentLevel
-        stats.totalXP += max(xpAwarded, 0)
+        stats.totalXP += finalXPAwarded
         stats.currentLevel = calculateLevelFromXP(stats.totalXP)
         stats.coins += max(coinsAwarded, 0)
         stats.lifetimeCoins += max(coinsAwarded, 0)
@@ -280,7 +305,7 @@ struct ProgressionService: ProgressionServicing {
         let transaction = RewardTransaction(
             rewardKey: rewardKey,
             rewardType: "planDayCompletion",
-            xpAwarded: max(xpAwarded, 0),
+            xpAwarded: finalXPAwarded,
             coinsAwarded: max(coinsAwarded, 0)
         )
         modelContext.insert(transaction)
@@ -295,10 +320,36 @@ struct ProgressionService: ProgressionServicing {
         return RewardClaimResult(
             rewardKey: rewardKey,
             didAwardRewards: true,
-            xpAwarded: max(xpAwarded, 0),
+            xpAwarded: finalXPAwarded,
             coinsAwarded: max(coinsAwarded, 0),
             levelUpResult: levelUpResult
         )
+    }
+
+    private func boostedXPAmount(for baseAmount: Int) throws -> Int {
+        let baseAmount = max(baseAmount, 0)
+        guard let boost = try activeXPBoost(now: .now) else {
+            return baseAmount
+        }
+
+        return Int((Double(baseAmount) * boost.multiplier).rounded(.down))
+    }
+
+    private func expireBoosts(now: Date) throws {
+        let descriptor = FetchDescriptor<ActiveBoost>(
+            predicate: #Predicate { boost in
+                boost.endDate <= now
+            }
+        )
+        let expiredBoosts = try modelContext.fetch(descriptor)
+        guard !expiredBoosts.isEmpty else {
+            return
+        }
+
+        for boost in expiredBoosts {
+            modelContext.delete(boost)
+        }
+        try modelContext.save()
     }
 
     private func rewardTransaction(for rewardKey: String) throws -> RewardTransaction? {

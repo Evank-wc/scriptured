@@ -11,6 +11,7 @@ final class HomeViewModel {
     private var readingProgressService: (any ReadingProgressServicing)?
     private var bibleService: (any BibleServicing)?
     private var readingPlanService: ReadingPlanService?
+    private var shopService: ShopService?
 
     private(set) var totalXP = 0
     private(set) var currentLevel = 1
@@ -21,6 +22,11 @@ final class HomeViewModel {
     private(set) var dailyGoalsCompleted = 0
     private(set) var todayPlanAssignment: ReadingPlanTodayAssignment?
     private(set) var planActionMessage: String?
+    private(set) var boostActionMessage: String?
+    private(set) var xpBoostInventoryQuantity = 0
+    private(set) var availableXPBoosts: [ShopItem] = []
+    private(set) var activeXPBoostMultiplier: Double?
+    private(set) var activeXPBoostEndDate: Date?
     private(set) var xpProgress = XPProgress(currentXP: 0, requiredXP: 150)
     private(set) var streakStatus = StreakStatus(
         currentStreak: 0,
@@ -110,13 +116,15 @@ final class HomeViewModel {
         streakService: any StreakServicing,
         readingProgressService: (any ReadingProgressServicing)? = nil,
         bibleService: (any BibleServicing)? = nil,
-        readingPlanService: ReadingPlanService? = nil
+        readingPlanService: ReadingPlanService? = nil,
+        shopService: ShopService? = nil
     ) {
         self.progressionService = progressionService
         self.streakService = streakService
         self.readingProgressService = readingProgressService
         self.bibleService = bibleService
         self.readingPlanService = readingPlanService
+        self.shopService = shopService
         loadStats()
     }
 
@@ -150,6 +158,43 @@ final class HomeViewModel {
         }
     }
 
+    func activateXPBoost(_ item: ShopItem) {
+        guard let shopService else {
+            boostActionMessage = "Shop inventory is not ready yet."
+            return
+        }
+
+        do {
+            let boost = try shopService.activateXPBoost(itemId: item.id)
+            activeXPBoostMultiplier = boost.multiplier
+            activeXPBoostEndDate = boost.endDate
+            boostActionMessage = "XP boost active: \(multiplierText(boost.multiplier)) XP."
+            ReadingActivitySignal.send()
+            loadStats()
+        } catch {
+            boostActionMessage = error.localizedDescription
+        }
+    }
+
+    func boostRemainingText(at date: Date = .now) -> String? {
+        guard let activeXPBoostEndDate, activeXPBoostEndDate > date else {
+            return nil
+        }
+
+        let remainingSeconds = Int(activeXPBoostEndDate.timeIntervalSince(date))
+        let minutes = remainingSeconds / 60
+        let seconds = remainingSeconds % 60
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    func multiplierText(_ multiplier: Double) -> String {
+        if multiplier.rounded(.down) == multiplier {
+            return "\(Int(multiplier))x"
+        }
+
+        return "\(multiplier)x"
+    }
+
     func loadStats() {
         guard let progressionService,
               let streakService else {
@@ -169,6 +214,12 @@ final class HomeViewModel {
             dailyGoalsCompleted = dailyGoalsCompletedCount(from: sessions) ?? dailyGoalsCompleted
             totalBibleChapters = try totalChapterCount() ?? totalBibleChapters
             todayPlanAssignment = try readingPlanService?.todaysAssignment()
+            let boost = try progressionService.activeXPBoost(now: .now)
+            activeXPBoostMultiplier = boost?.multiplier
+            activeXPBoostEndDate = boost?.endDate
+            availableXPBoosts = try shopService?.shopItems()
+                .filter { $0.type == .xpBoost && $0.inventoryQuantity > 0 } ?? []
+            xpBoostInventoryQuantity = availableXPBoosts.reduce(0) { $0 + $1.inventoryQuantity }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

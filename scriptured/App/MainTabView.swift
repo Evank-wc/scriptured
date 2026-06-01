@@ -73,6 +73,7 @@ struct MainTabView: View {
             homeViewModel.loadStats()
             bibleReaderViewModel.refreshProgressFromStorage()
             plansViewModel.refreshSelectionState()
+            shopViewModel.loadShop()
         }
     }
 
@@ -80,13 +81,15 @@ struct MainTabView: View {
         let progressionService = ProgressionService(modelContext: modelContext)
         let readingProgressService = ReadingProgressService(modelContext: modelContext)
         let readingPlanService = ReadingPlanService(modelContext: modelContext)
+        let shopService = ShopService(modelContext: modelContext)
 
         homeViewModel.configure(
             progressionService: progressionService,
             streakService: StreakService(modelContext: modelContext),
             readingProgressService: readingProgressService,
             bibleService: environment.bibleService,
-            readingPlanService: readingPlanService
+            readingPlanService: readingPlanService,
+            shopService: shopService
         )
         bibleReaderViewModel.configure(
             progressService: readingProgressService,
@@ -94,6 +97,8 @@ struct MainTabView: View {
             readingPlanService: readingPlanService
         )
         plansViewModel.configure(readingPlanService: readingPlanService)
+        shopViewModel.configure(shopService: shopService)
+        profileViewModel.configure(progressionService: progressionService)
     }
 }
 

@@ -62,6 +62,7 @@ struct ShopItem: Identifiable, Hashable, Codable {
     let price: Int
     let isOwned: Bool
     let isEquipped: Bool
+    let inventoryQuantity: Int
 }
 
 @Model
